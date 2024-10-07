@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+        }
+
+        body {
+            background-color: black;
+        }
+
+        .textlight {
+            color: white;
+            font-family: monospace;
+            display: flex;
+            font-size: x-large;
+            /* justify-content: center; */
+            padding-top: 8vh;
+            padding-left: 8vh;
+        }
+
+        .container {
+            width: 20vw;
+            height: 80vh;
+            position: fixed;
+            top: 10vh;
+            left: 0;
+            background: linear-gradient(145deg, rgba(34, 34, 34, 1) 0%, rgba(80, 80, 80, 1) 100%);
+            overflow: hidden;
+            border-radius: 15px;
+            margin-top: 40px;
+            transition: width 0.3s ease-in-out;
+        }
+
+        .menu ul {
+            list-style: none;
+            padding: 20px;
+        }
+
+        .menu li {
+            margin-bottom: 15px;
+        }
+
+        /* Radio Button Styling */
+        .menu input[type="radio"] {
+            display: none; /* Hide default radio button */
+        }
+
+        .menu label {
+            display: block;
+            color: white;
+            font-size: 18px;
+            padding: 10px 0;
+            cursor: pointer; /* Make it clickable */
+            transition: background-color 0.3s ease;
+        }
+
+        .menu input[type="radio"]:checked + label {
+            background-color: rgba(255, 255, 255, 0.1); 
+        }
+
+        /* Collapse Bar Styles */
+        .collapse-bar {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            transition: background-color 0.3s ease;
+        }
+
+        .collapse-bar:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .collapse-bar i {
+            transition: transform 0.3s ease;
+        }
+
+        .container.collapsed {
+            width: 5vw;
+        }
+
+        .container.collapsed .menu {
+            display: none;
+        }
+
+        .container.collapsed .collapse-bar i {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="textlight">
+        AI SEARCH ENGINE
+    </div>
+    <div class="container">
+        <div class="collapse-bar">
+            <i class="fas fa-angle-right"></i> 
+        </div>
+        <div class="menu">
+            <ul>
+                <li>
+                    <input type="radio" id="model-4o" name="llm-model" value="4o">
+                    <label for="model-4o">4O</label>
+                </li>
+                <li>
+                    <input type="radio" id="model-o1" name="llm-model" value="o1">
+                    <label for="model-o1">O1</label>
+                </li>
+                <li>
+                    <input type="radio" id="model-llama" name="llm-model" value="llama">
+                    <label for="model-llama">Llama</label>
+                </li>
+                </ul>
+        </div>
+    </div>
+
+    <script src="https://kit.fontawesome.com/6409299f88.js" crossorigin="anonymous"></script>
+    <script>
+        const collapseBar = document.querySelector('.collapse-bar');
+        const container = document.querySelector('.container');
+
+        collapseBar.addEventListener('click', () => {
+            container.classList.toggle('collapsed');
+        });
+    </script>
+</body>
+</html>

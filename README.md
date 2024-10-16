@@ -1,121 +1,164 @@
-# 🤖 Agent Class
+# Welcome to ArcheAI! 🚀
 
-The `Agent` class is designed to create an AI agent that can intelligently interact with various tools and an underlying LLM (Large Language Model). This class can dynamically manage tools, execute tasks, and generate responses based on provided inputs.
+Building AI agents should feel like assembling a dream team, not
+wrestling with complex code. That's where **ArcheAI** comes in. ✨
 
-## ✨ Features
+**ArcheAI is a lightweight Python framework designed to make AI agent
+development intuitive, flexible, and downright fun!** 🎉
 
-- **Dynamic Tool Management:** 🔄 Add or remove tools as needed without restarting the agent.
-- **Tool Selection:** 🧠 Automatically selects the appropriate tool based on the task description.
-- **JSON Response Handling:** 📄 Generates and processes JSON-based outputs for interaction with tools.
-- **Verbose Mode:** 📢 Detailed logging for debugging and understanding the decision-making process.
-- **LLM Integration:** 🔗 Uses the GroqLLM for generating AI-driven responses.
+You might be thinking: *"Another AI agent framework? What makes ArcheAI
+different?"* 🤔
 
-## 🧰 Installation
+## Why ArcheAI?
 
-To install the necessary packages, run:
+Let's face it, building sophisticated AI agents can feel overwhelming.
+ArcheAI is different because it's built on these core principles:
 
-```bash
-pip install -r requirements.txt 
+-   **Simplicity First:** ArcheAI strips away unnecessary complexity,
+    giving you a clean and elegant API that gets straight to the point.
+    Focus on what matters -- building awesome agents!
+-   **Unleash Your Creativity:** We believe in giving you the tools, not
+    dictating the path. ArcheAI's modular design empowers you to
+    experiment with different LLMs (like Gemini, Groq, Cohere, OpenAI,
+    and Anthropic), craft custom tools, and define your agent's unique
+    personality. 🎨
+-   **Power in Collaboration:** Great things happen when minds work
+    together! ArcheAI's **TaskForce** feature makes it a breeze to
+    orchestrate multiple agents, allowing them to collaborate seamlessly
+    on complex tasks. 🤝
+-   **Built for Exploration:** The world of AI is constantly evolving.
+    ArcheAI embraces this by providing a flexible foundation that's
+    ready to adapt to new LLMs, tools, and possibilities. The only limit
+    is your imagination!
+
+## Installation
+
+Get started with ArcheAI in just a few steps:
+
+``` bash
+pip install archeai 
 ```
 
-## 🚀 Usage
+## Core Concepts
 
-### 1️⃣ Example of a tool function and agent interaction:
+### The `Agent` Class
 
-This example demonstrates how to create a simple tool and use it with the Agent class.
+The `Agent` class is the heart of ArcheAI. It represents an individual
+AI agent within your system.
 
-```python
-# tool with One Parameter
+#### Attributes
 
-from arche.llms import GroqLLM
-from arche.tools import OwnTool
-from arche.agents import Agent
+- `llm`                    An instance of the LLM (Large Language Model) class that the agent will use for language processing and decision-making.
+- `tools`                  A list of `Tool` objects that define the actions the agent can perform.
+- `identity`               A string representing the agent's name or identifier.
+- `description`            A brief description of the agent's role or purpose.
+- `expected_output`        A string describing the expected format or style of the agent's responses.
+- `objective`              The current task or goal that the agent is trying to achieve.
+- `memory_enabled`         A boolean value indicating whether the agent should use memory (to retain context from previous interactions). Defaults to `True`.
+- `memory_dir`             The directory where the agent's memory files will be stored. Defaults to `memories`.
+- `max_memory_responses`   The maximum number of previous conversation turns to store in memory. Defaults to `12`.
+- `max_iterations`         The maximum number of iterations the agent will attempt to generate a valid response. Defaults to `3`.
+- `verbose`                A boolean value indicating whether the agent should print verbose output during execution. Defaults to `False`.
 
-def greet(name: str) -> str:
-    return f"Hello, {name}!"
+#### Methods
 
-greet_tool = OwnTool(
-    func=greet,
-    description="A tool that greets a user.",
-    params={"name": {"type": "string", "description": "The name of the user."}}
-)
+- `add_tool(tool)`           Adds a `Tool` object to the agent's `tools` list.
+- `remove_tool(tool_name)`   Removes a tool from the agent's `tools` list by its name.
+- `rollout()`                Executes the agent's main workflow, including processing the `objective`, using tools, and generating a response.
 
-agent = Agent(
-    llm=GroqLLM(),
-    tools=[greet_tool],
-    name="GreetingAgent",
-    description="An agent that greets users.",
-    task="Greet John.",
-    verbose=True
-)
+### The `Tool` Class
 
-result = agent.run()
-print(result)
+The `Tool` class represents an action or capability that an agent can
+perform. Tools can be simple functions, complex operations, or even
+integrations with external services.
+
+ArcheAI's `Tool` class is designed to make it incredibly easy to define
+and use tools within your agents. You don't need to write complex
+wrappers or adapters. Simply provide the core logic of your tool as a
+Python function, and ArcheAI will handle the rest!
+
+**Example:**
+
+``` python
+from archeai import Tool
+
+def get_weather(city: str):
+    """Fetches the current weather for a given city.""" 
+    # ... (Implementation to fetch weather data) ... 
+    return weather_data 
+
+weather_tool = Tool(func=get_weather, 
+                   description="Gets the current weather for a specified city.")
 ```
 
-### 2️⃣ Multi-tool use with multiple parameters:
+In this example, we define a simple tool called `weather_tool`. The tool
+uses the `get_weather` function to fetch weather data for a given city.
+The `description` parameter provides a concise explanation of what the
+tool does, which is helpful for both you and the agent to understand its
+purpose.
 
-This example showcases how to use multiple tools with the Agent class, each having multiple parameters.
+#### Attributes
 
-```python
-from arche.llms import Gemini
-from arche.agents import Agent
-from arche.tools import OwnTool, get_current_time, web_search
+- `func`            The Python function that defines the tool's action.
+- `name`            The name of the tool (automatically derived from the function name).
+- `description`     A brief description of what the tool does. This is used by the agent to understand the tool's purpose.
+- `returns_value`   A boolean indicating whether the tool returns a value that can be used by other tools or included in the response. Defaults to `True`.
+- `instance`        Optional instance of a class if the tool is a bound method.
+- `llm`             Optional LLM object for more advanced tool interactions (e.g., using the LLM to help determine tool parameters).
+- `verbose`         A boolean indicating whether the tool should print verbose output during execution. Defaults to `False`.
+- `params`          A dictionary containing information about the tool's parameters (automatically extracted).
 
-def gcd(a:int, b:int):
-    """
-    Calculate the Greatest Common Divisor (GCD) of two numbers using the Euclidean algorithm.
 
-    Parameters:
-    a (int): The first number.
-    b (int): The second number.
+### The `TaskForce` Class
 
-    Returns:
-    int: The GCD of the two numbers.
-    """
-    while b:
-        a, b = b, a % b
-    return a
-    # return a+b
+The `TaskForce` class lets you manage a group of `Agent` objects,
+enabling collaboration and complex workflow orchestration.
 
-# Define the tools using the OwnTool class
-gcd_tool = OwnTool(
-    func=gcd,
-    description="Provides the gcd of two provided numbers",
-    params={"a": {"type": "int", "description": "The first number includes only number such as 1 ,2"}, "b": {"type": "int", "description": "The second number such as 1,2 ,3"}}
-)
+#### Attributes
 
-web_tool = OwnTool(
-    func=web_search,
-    description="Provides the current web results from Google for the given query, best for getting real-time data.",
-    params={"hello": {"type": "string", "description": "The query to do search for"}}
-)
+- `agents`       A list of `Agent` objects that belong to the task force.
+- `objective`    The overall goal or task that the task force is trying to achieve.
+- `cache_file`   The path to a file where the TaskForce's conversation history can be cached.
 
-time_tool = OwnTool(
-    func=get_current_time,
-    description="Provides the current time.",
-)#don't provide the param section for no param tools
+#### Methods
 
-# Initialize the language model instance
+- `rollout()`   Starts the task force's execution. This method intelligently assigns the `objective` to the most suitable agent and manages the workflow.
 
-llm_instance = Gemini()
+## Basic Example: Building Your First Team
 
-# Create the agent with multiple tools
-agent = Agent(
-  llm=llm_instance,
-  tools=[time_tool, gcd_tool, web_tool],
-  name="Chatbot",
-  description="A powerful Chatbot",
-  sample_output="",
-  task=input(">>> "),
-  verbose=False,
-  memory=True
-)
+Let's bring it all together with a simple example:
 
-# Run the agent and print the result
-result = agent.run()
-print(result)
+``` python
+from archeai import Agent, Tool, TaskForce
+from archeai.llms import Openai 
+
+# Initialize your LLM
+llm = Openai()
+
+# Define a greeting tool
+def say_hello(name: str):
+  return f"Hello there, {name}! 👋" 
+
+hello_tool = Tool(func=say_hello, 
+                   description="Greets the user by name.")
+
+# Create an agent
+greeter = Agent(llm=llm, 
+                tools=[hello_tool], 
+                identity="Friendly Greeter",
+                memory=False)
+
+# Assemble your task force!
+my_taskforce = TaskForce(agents=[greeter], 
+                         objective="Give a warm welcome to our new user!") 
+
+# Start the interaction
+response = my_taskforce.rollout() 
+print(response) 
 ```
+
+This basic example shows how to create a simple agent with a tool and
+then use a `TaskForce` to manage its execution.
 
 ## 🤝 Contributing
 
@@ -123,4 +166,4 @@ Contributions are welcome! Please feel free to open an issue or submit a pull re
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE). 
+This project is licensed under the [MIT License](LICENSE).

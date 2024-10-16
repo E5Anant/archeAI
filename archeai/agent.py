@@ -205,56 +205,56 @@ class Agent:
     def _agent_pass(self, response) -> str:
         """Passes information to other agents if necessary."""
         agents = self._get_agents_info()
-
         self.llm.__init__(
-            system_prompt=f"""
-            **You are the Communication Handler responsible for interconnecting agents.**
+            system_prompt = f"""
+            As the Communication Handler, evaluate whether to pass the information to another agent or end the conversation based on the current response and overall objective.
 
-            ### AVAILABLE AGENTS:
+            # AVAILABLE AGENTS:
             {agents}
 
-            ### Previous Agent Interaction:
+            # Previous Agent Interaction:
             {{{self.identity} : {response}}}
 
-            ### Previous Responses and Details:
-            Agent - {self.identity}
-            Description - {self.description}
-            Response - {response}
+            # Previous Response and Details:
+            **Agent** - {self.identity}
+            **Description** - {self.description}
+            **Response** - {response}
 
-            You are tasked to DECIDE whether to:
+            You are tasked to decide whether to:
 
-            1. **PASS** the information to the next most suitable agent.
-            2. **END** the conversation and return the current `response` as the final answer.
+            PASS the information to the next most suitable agent.
+            END the conversation and return the current response as the final answer.
+            REASONING:
+            Carefully consider the current ‘response’, the overall ‘objective,’ and previous agent interactions.
 
-            ### REASONING:
-            Carefully consider the current 'response', the overall 'objective', and previous agent interactions.
-            - If the 'response' seems like a complete and satisfactory answer to the 'objective', choose **END**.
-            - If a sub-task within the 'objective' still needs to be addressed, and another agent is more suitable, choose **PASS**.
-
-            ### OUTPUT FORMAT:
+            If the ‘response’ seems like a complete and satisfactory answer to the ‘objective’, choose END.
+            If a sub-task within the ‘objective’ still needs to be addressed, and another agent is more suitable, choose PASS.
+            # OUTPUT FORMAT:
             Only reply in one of these two JSON formats:
 
-            **To PASS to another agent:**
+            # To PASS to another agent:
+
             ```json
             {{
-                "decision": "PASS",
-                "agent": "<agent_name>",
-                "prompt": "Prompt for the agent (Markdown format, highlight important info with **)",
-                "thought": "Summary of the decision process (previous agent's actions, reason for passing)"
+            "decision": "PASS",
+            "agent": "<agent_name>",
+            "prompt": "Prompt for the agent (Markdown format, highlight important info with **)",
+            "thought": "Summary of the decision process (previous agent's actions, reason for passing)"
             }}
             ```
+            # To END the conversation:
 
-            **To END the conversation:**
-            ```json
+            ```JSON
             {{
-                "decision": "END"
+            "decision": "END"
             }}
             ```
+            **Include tool use inside the prompt when applicable.**
 
-            ### OBJECTIVE:
+            # OBJECTIVE:
             {self.passobjective}
-            """
-        )
+        
+        """)
 
         pass_info = self.llm.run("Generate only JSON")
         self.llm.reset()
@@ -303,7 +303,7 @@ class Agent:
             # Initializing LLM with an improved system prompt
             self.llm.__init__(
                 system_prompt=f"""
-                **You are {self.identity}, an advanced AI assistant capable of using multiple tools in sequence (tool chaining) to fulfill complex user requests. Your task is to manage the execution of tools, process their outputs, and pass them as inputs to subsequent tools when necessary.
+                **You are the json instructor of the AI agent `{self.identity}`, an advanced AI assistant capable of using multiple tools in sequence (tool chaining) to fulfill complex user requests. Your task is to manage the execution of tools, process their outputs, and pass them as inputs to subsequent tools when necessary.
 **Outline for AI Tool Chaining**
 
 #### I. Introduction
@@ -383,7 +383,7 @@ B. **Example of Normal Conversation**
 #### VII. Important Notes
 - Only the `llm_tool` should be used for normal conversations.
 - All responses should strictly use only JSON and not plain text and if want to reply directly to the user adher to `direct_answer` tool.
-- **Use the 'direct_answer' tool** when you can directly answer the user's question without using any other tools nor performing tool chaining (mostly for conversation queries). this would return directly your response to the user.
+- Use the ‘direct_answer’ tool when you can directly answer the user’s question without using any other tools nor performing tool chaining (mostly for conversation queries). This would return directly your response to the user.
 - **Do not refer to specific previous turns or tool calls.** The user only sees your current response.
 - Do not hallucinate tool names or capabilities. You can only use the tools provided. 
 - If a tool requires specific information, make sure it is available in the context or from previous tool calls. 
@@ -395,11 +395,11 @@ B. **Example of Normal Conversation**
 - **Analyze the user's query and respond accordingly.**
 - If a conversation query is doubtfull to you, give the query as is to the `llm_tool`.
 
-### OBJECTIVE:
+# OBJECTIVE:
 {self.objective}
 
-#### Conclusion
-Emphasize the significance of adhering to the outlined procedures to ensure the seamless execution of tool chaining, error management, and the successful handling of user requests. With adhering to different tool calls at once if needed.
+# Conclusion
+Emphasize the significance of adhering to the outlined procedures to ensure the seamless execution of tool chaining, error management, and the successful handling of user requests. Adhere to different tool calls at once if needed.
                 """,
                 messages=[],
             )
@@ -662,19 +662,22 @@ Emphasize the significance of adhering to the outlined procedures to ensure the 
     def _is_response_valid(self, response: str, call) -> bool:
         """Uses the LLM to evaluate the response validity based on the current objective."""
         prompt = f"""
-        You are an AI assistant tasked with evaluating the validity of a response, considering the available tools.
+        Evaluate the validity of the given response considering the available tools.
 
-        Current Objective: {self.objective}
-        Function Call: {call}
-        Response: {response}
-        Available Tools: {self.tool_info_for_validation}
+        **Your Objective**: {self.objective}
+        **Function Call**: {call}
+        **Response**: {response}
+        **Available Tools**: {self.tool_info_for_validation}
 
         Based on the current objective, available tools, and the function call, is the response valid?
-        **Check if claims made in the response are true, from `Function Call`.**
-        **The response does not show the content make sure to analyze the `Function Call.`**
-        **Ignore minor summarization errors.**
-        **If the response is not having minor details, it is still valid only if the content is correct.**
-        **Minor errors from the response should be ignored.**
+
+        * Check if the claims made in the response are true, as per the ‘Function Call’.
+        * Even if the response does not show the content, ensure it aligns with the ‘Function Call’.
+        * Ignore any minor summarization errors.
+        * If minor ignorable parts are removed from the response, consider it as valid.
+        * If the response lacks minor details, it is still valid if the core content is correct.
+        * Minor errors in the response should be ignored.
+
         Return your answer in JSON format:
         {{
             "valid": <true or false>,

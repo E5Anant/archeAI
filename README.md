@@ -131,6 +131,9 @@ print(response)
 ```
 
 This basic example shows how to create a simple agent with a tool and then use a `TaskForce` to manage its execution.
+--
+
+## Make sure to star this repo if you liked it. 
 
 ## 🤝 Contributing
 

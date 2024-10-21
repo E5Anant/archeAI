@@ -13,15 +13,13 @@ colorama.init(autoreset=
 class TaskForce:
     def __init__(self,
                  agents: List[Agent],
-                 objective:str = "No current task",
-                 cache_file:str = "cache.txt") -> None:
+                 objective:str = "No current task") -> None:
         self.agents = agents
         self.llm = self.agents[0].llm
         self.objective = objective
         for agent in self.agents:
             agent.agents = self.agents
             agent.passobjective = self.objective
-            agent.cache_file = cache_file
         
     def rollout(self) -> str:
         agent_info = self._get_agents_info()

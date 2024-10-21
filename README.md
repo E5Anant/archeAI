@@ -91,7 +91,6 @@ The `TaskForce` class lets you manage a group of `Agent` objects, enabling colla
 
 - `agents`       A list of `Agent` objects that belong to the task force.
 - `objective`    The overall goal or task that the task force is trying to achieve.
-- `cache_file`   The path to a file where the TaskForce's conversation history can be cached.
 
 #### Methods
 

@@ -38,7 +38,6 @@ The `Agent` class is the heart of ArcheAI. It represents an individual AI agent 
 | `identity` | A string representing the agent's name or identifier. |
 | `description` | A brief description of the agent's role or purpose. |
 | `expected_output` | A string describing the expected format or style of the agent's responses. |
-| `objective` | The current task or goal that the agent is trying to achieve. |
 | `memory` | A boolean value indicating whether the agent should use memory (to retain context from previous interactions). Defaults to `True`. |
 | `memory_dir` | The directory where the agent's memory files will be stored. Defaults to `memories`. |
 | `max_chat_responses` | The maximum number of previous conversation turns to store in memory. Defaults to `12`. |

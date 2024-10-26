@@ -1,0 +1,13 @@
+cohere
+groq
+rich==12.6.0
+python-dotenv==1.0.1
+google-generativeai
+requests==2.31.0
+colorama==0.4.6
+googlesearch-python==1.2.4
+yfinance==0.2.41
+bs4==0.0.1
+anthropic
+openai
+scikit-learn==1.5.2

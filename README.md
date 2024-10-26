@@ -31,17 +31,21 @@ The `Agent` class is the heart of ArcheAI. It represents an individual AI agent 
 
 #### Attributes
 
-- `llm`                    An instance of the LLM (Large Language Model) class that the agent will use for language processing and decision-making.
-- `tools`                  A list of `Tool` objects that define the actions the agent can perform.
-- `identity`               A string representing the agent's name or identifier.
-- `description`            A brief description of the agent's role or purpose.
-- `expected_output`        A string describing the expected format or style of the agent's responses.
-- `objective`              The current task or goal that the agent is trying to achieve.
-- `memory_enabled`         A boolean value indicating whether the agent should use memory (to retain context from previous interactions). Defaults to `True`.
-- `memory_dir`             The directory where the agent's memory files will be stored. Defaults to `memories`.
-- `max_memory_responses`   The maximum number of previous conversation turns to store in memory. Defaults to `12`.
-- `max_iterations`         The maximum number of iterations the agent will attempt to generate a valid response. Defaults to `3`.
-- `verbose`                A boolean value indicating whether the agent should print verbose output during execution. Defaults to `False`.
+| Attribute | Description |
+|-----------|-------------|
+| `llm` | An instance of the LLM (Large Language Model) class that the agent will use for language processing and decision-making. |
+| `tools` | A list of `Tool` objects that define the actions the agent can perform. |
+| `identity` | A string representing the agent's name or identifier. |
+| `description` | A brief description of the agent's role or purpose. |
+| `expected_output` | A string describing the expected format or style of the agent's responses. |
+| `objective` | The current task or goal that the agent is trying to achieve. |
+| `memory` | A boolean value indicating whether the agent should use memory (to retain context from previous interactions). Defaults to `True`. |
+| `memory_dir` | The directory where the agent's memory files will be stored. Defaults to `memories`. |
+| `max_chat_responses` | The maximum number of previous conversation turns to store in memory. Defaults to `12`. |
+| `max_summary_entries` | The maximum number of summary entries to store in memory. Defaults to `3`. |
+| `max_iterations` | The maximum number of iterations the agent will attempt to generate a valid response. Defaults to `3`. |
+| `check_response_validity` | A boolean value indicating whether the agent should check the validity of the response before it is returned. Defaults to `True`. |
+| `verbose` | A boolean value indicating whether the agent should print verbose output during execution. Defaults to `False`. |
 
 #### Methods
 
@@ -66,22 +70,24 @@ def get_weather(city: str):
     return weather_data 
 
 weather_tool = Tool(func=get_weather, 
-                   description="Gets the current weather for a specified city.")
+                   description="Gets the current weather for a specified city.",
+                    params={'city': {'description': 'The city for the weather to find.', 'type': 'str', 'default': 'unknown'}})
 ```
 
 In this example, we define a simple tool called `weather_tool`. The tool uses the `get_weather` function to fetch weather data for a given city. The `description` parameter provides a concise explanation of what the tool does, which is helpful for both you and the agent to understand its purpose.
 
 #### Attributes
 
-- `func`            The Python function that defines the tool's action.
-- `name`            The name of the tool (automatically derived from the function name).
-- `description`     A brief description of what the tool does. This is used by the agent to understand the tool's purpose.
-- `returns_value`   A boolean indicating whether the tool returns a value that can be used by other tools or included in the response. Defaults to `True`.
-- `instance`        Optional instance of a class if the tool is a bound method.
-- `llm`             Optional LLM object for more advanced tool interactions (e.g., using the LLM to help determine tool parameters).
-- `verbose`         A boolean indicating whether the tool should print verbose output during execution. Defaults to `False`.
-- `params`          A dictionary containing information about the tool's parameters (automatically extracted).
-
+| Attribute | Description |
+|-----------|-------------|
+| `func` | The Python function that defines the tool's action. |
+| `name` | The name of the tool (automatically derived from the function name). |
+| `description` | A brief description of what the tool does. This is used by the agent to understand the tool's purpose. |
+| `returns_value` | A boolean indicating whether the tool returns a value that can be used by other tools or included in the response. Defaults to `True`. |
+| `instance` | Optional instance of a class if the tool is a bound method. |
+| `llm` | Optional LLM object for more advanced tool interactions (e.g., using the LLM to help determine tool parameters). |
+| `verbose` | A boolean indicating whether the tool should print verbose output during execution. Defaults to `False`. |
+| `params` | An Optional dictionary containing information about the tool's parameters (automatically extracted if not provided). |
 
 ### The `TaskForce` Class 👥
 
@@ -89,8 +95,10 @@ The `TaskForce` class lets you manage a group of `Agent` objects, enabling colla
 
 #### Attributes
 
-- `agents`       A list of `Agent` objects that belong to the task force.
-- `objective`    The overall goal or task that the task force is trying to achieve.
+| Attribute | Description |
+|-----------|-------------|
+| `agents` | A list of `Agent` objects that belong to the task force. |
+| `objective` | A overall goal or task that the task force is trying to achieve. |
 
 #### Methods
 
@@ -102,35 +110,48 @@ Let's bring it all together with a simple example:
 
 ```python
 from archeai import Agent, Tool, TaskForce
-from archeai.llms import Openai 
+from archeai.llms import Gemini 
 
 # Initialize your LLM
-llm = Openai()
+llm = Gemini()
 
 # Define a greeting tool
 def say_hello(name: str):
   return f"Hello there, {name}! 👋" 
 
+def calculate(equation: str):
+  return eval(equation)
+
 hello_tool = Tool(func=say_hello, 
-                   description="Greets the user by name.")
+                   description="Greets the user by name.",
+                    params={'name': {'description': 'The name to greet.', 'type': 'str', 'default': 'unknown'}})
+
+calculate_tool = Tool(func=calculate, 
+                   description="Evaluates an equation.",
+                    params={'equation': {'description': 'The equation to evaluate.', 'type': 'str', 'default': 'unknown'}})
 
 # Create an agent
 greeter = Agent(llm=llm, 
                 tools=[hello_tool], 
                 identity="Friendly Greeter",
-                memory=False)
+                memory=False,
+                verbose=True)
+
+math_magician = Agent(llm=llm, 
+                tools=[calculate_tool], 
+                identity="Math Magician",
+                memory=False,
+                verbose=True)
 
 # Assemble your task force!
-my_taskforce = TaskForce(agents=[greeter], 
-                         objective="Give a warm welcome to our new user!") 
+my_taskforce = TaskForce(agents=[greeter, math_magician], 
+                         objective="Hi I am Mervin greet me, can you solve `3-4*2*5/4/2.1*6` for me and give a explanation.") 
 
 # Start the interaction
 response = my_taskforce.rollout() 
-print(response) 
 ```
 
 This basic example shows how to create a simple agent with a tool and then use a `TaskForce` to manage its execution.
---
 
 ## Make sure to star this repo if you liked it. 
 

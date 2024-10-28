@@ -104,7 +104,7 @@ The `TaskForce` class lets you manage a group of `Agent` objects, enabling colla
 
 - `rollout()`   Starts the task force's execution. This method intelligently assigns the `objective` to the most suitable agent and manages the workflow.
 
-![Workflow](./assets/WorkFlow.jpg)
+![Workflow](./assets/WorkFlow.png)
 
 ## Basic Example: Building Your First Team 🧑‍🤝‍🧑
 

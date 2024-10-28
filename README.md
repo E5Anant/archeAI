@@ -25,8 +25,6 @@ pip install archeai
 
 ## Core Concepts 📚
 
-![Diagram](./assets/structure.jpg)
-
 ### The `Agent` Class 👤
 
 The `Agent` class is the heart of ArcheAI. It represents an individual AI agent within your system.
@@ -105,6 +103,8 @@ The `TaskForce` class lets you manage a group of `Agent` objects, enabling colla
 #### Methods
 
 - `rollout()`   Starts the task force's execution. This method intelligently assigns the `objective` to the most suitable agent and manages the workflow.
+
+![Workflow](./assets/WorkFlow.jpg)
 
 ## Basic Example: Building Your First Team 🧑‍🤝‍🧑
 

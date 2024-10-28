@@ -6,6 +6,7 @@ from archeai.llms import GroqLLM  # Your LLM classes
 from archeai.tools import Tool
 from typing import Type, List, Dict, Any
 from colorama import Fore, Style
+import colorama
 from archeai.memory import Memory  # Import the Memory class
 
 # Configure logging
@@ -13,6 +14,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+colorama.init(autoreset=True)
 
 def convert_function(func_name, description, **params):
     """Converts function info to JSON schema, handling missing params."""
@@ -101,6 +103,8 @@ class Agent:
         self.memory_enabled = memory
         self.max_iterations = max_iterations  # Assign to the instance variable
         self.check_validity = check_response_validity
+        self.agent_responses = {}
+        self.response_chain = []
 
         self.memory_dir = memory_dir
         if not os.path.exists(memory_dir):
@@ -204,85 +208,182 @@ class Agent:
         print(result)
         return result
 
-    def _agent_pass(self, response) -> str:
-        """Passes information to other agents if necessary."""
+    def _get_agent_history(self) -> str:
+        """Format the complete history of agent responses."""
+        history = []
+        for agent_name, responses in self.agent_responses.items():
+            agent_history = f"\n### {agent_name}'s Responses:\n"
+            for resp in responses:
+                agent_history += f"- [{resp['timestamp']}] {resp['response']}\n"
+            history.append(agent_history)
+        return "\n".join(history)
+
+    def _record_agent_response(self, agent_name: str, response: str):
+        """Record an agent's response with timestamp and maintain response chain."""
+        from datetime import datetime
+        timestamp = datetime.now().isoformat()
+        
+        # Store in agent_responses dictionary
+        if agent_name not in self.agent_responses:
+            self.agent_responses[agent_name] = []
+        self.agent_responses[agent_name].append({
+            "timestamp": timestamp,
+            "response": response
+        })
+        
+        # Add to response chain
+        self.response_chain.append({
+            "agent": agent_name,
+            "timestamp": timestamp,
+            "response": response,
+            "tools_used": [tool.func.__name__ for tool in self.tools] if self.tools else []
+        })
+
+    def _synthesize_response(self, current_response: str) -> Dict:
+        """Generate a synthesized response based on all agent interactions."""
+        agents = self._get_agents_info()
+        response_history = self._format_response_chain()
+        
+        synthesis_prompt = f"""
+        You are an expert Response Synthesizer tasked with creating a comprehensive final response that addresses the original objective by combining insights from multiple AI agents. Your goal is to either create a final response or determine if another agent's involvement is needed.
+
+        # ORIGINAL OBJECTIVE
+        {self.passobjective}
+
+        # AVAILABLE AGENTS AND THEIR CAPABILITIES
+        {agents}
+
+        # COMPLETE INTERACTION HISTORY
+        {response_history}
+
+        # CURRENT CONTEXT
+        Latest Response from {self.identity}:
+        {current_response}
+
+        # YOUR TASKS
+
+        1. ANALYZE ALL RESPONSES:
+        - Review each agent's contribution
+        - Identify key insights and important findings
+        - Note any gaps or inconsistencies
+        - Evaluate how well the objective has been addressed
+
+        2. SYNTHESIZE INFORMATION:
+        - Combine relevant insights from all agents
+        - Resolve any contradictions
+        - Ensure all aspects of the objective are covered
+        - Create a coherent narrative from multiple perspectives
+
+        3. MAKE A STRATEGIC DECISION:
+        Either:
+        A) Generate a complete response that fulfills the objective
+        B) Identify gaps requiring another agent's expertise
+
+        4. ENSURE QUALITY:
+        - Verify accuracy of combined information
+        - Maintain consistency in tone and style
+        - Preserve important details from each agent
+        - Format for clarity and readability
+
+        # OUTPUT FORMAT
+        Respond in one of these two JSON formats:
+
+        1. If the objective can be fully addressed now:
+        ```json
+        {{
+            "decision": "END",
+            "final_response": {{
+                "synthesized_answer": "Complete, well-structured response that fulfills the objective",
+                "contributing_agents": ["List of agents whose input was used"],
+                "key_insights": ["List of main points from different agents"],
+                "reasoning": "Explanation of how this response fulfills the objective"
+            }}
+        }}
+        ```
+
+        2. If another agent's involvement is needed:
+        ```json
+        {{
+            "decision": "PASS",
+            "agent": "<agent_name>",
+            "prompt": "Detailed prompt highlighting gaps and required information",
+            "progress_summary": {{
+                "completed_aspects": ["List of addressed points"],
+                "remaining_gaps": ["List of points still needing attention"],
+                "next_steps": "Specific tasks for the next agent"
+            }}
+        }}
+        ```
+
+        # GUIDELINES
+        - Maintain factual accuracy when combining information
+        - Preserve the context and nuance from each agent's response
+        - Focus on creating a cohesive narrative
+        - Be explicit about any remaining gaps or uncertainties
+        - Ensure the final response directly addresses the original objective
+        """
+
+        self.llm.__init__(system_prompt="You are an expert Response Synthesizer...")
+        synthesis_result = self.llm.run(synthesis_prompt)
+        self.llm.reset()
+        
+        return self._parse_and_fix_json(synthesis_result)
+
+    def _format_response_chain(self) -> str:
+        """Format the complete chain of responses in chronological order."""
+        formatted_history = "## Complete Response Chain:\n\n"
+        for entry in self.response_chain:
+            formatted_history += f"""
+            ### Agent: {entry['agent']}
+            Timestamp: {entry['timestamp']}
+            Tools Used: {', '.join(entry['tools_used']) if entry['tools_used'] else 'None'}
+            Response:
+            {entry['response']}
+            {'---' * 30}
+            """
+        return formatted_history
+
+    def _agent_pass(self, response: str) -> str:
+        """Enhanced agent pass with response synthesis."""
+        # Record the current agent's response
+        self._record_agent_response(self.identity, response)
+
         if len(self.agents) == 1:
             print(f"{Fore.BLUE}Final Consolidated response:{Style.RESET_ALL}")
             print(response)
             return response
-        else: 
-            agents = self._get_agents_info()
-            self.llm.__init__(
-                system_prompt = f"""
-                As the Communication Handler, evaluate whether to pass the information to another agent or end the conversation based on the current response and overall objective.
-
-                # AVAILABLE AGENTS:
-                {agents}
-
-                # Previous Agent Interaction:
-                {{{self.identity} : {response}}}
-
-                # Previous Response and Details:
-                **Agent** - {self.identity}
-                **Description** - {self.description}
-                **Response** - {response}
-
-                You are tasked to decide whether to:
-
-                PASS the information to the next most suitable agent.
-                END the conversation and return the current response as the final answer.
-                REASONING:
-                Carefully consider the current ‘response’, the overall ‘objective,’ and previous agent interactions.
-
-                If the ‘response’ seems like a complete and satisfactory answer to the ‘objective’, choose END.
-                If a sub-task within the ‘objective’ still needs to be addressed, and another agent is more suitable, choose PASS.
-                # OUTPUT FORMAT:
-                Only reply in one of these two JSON formats:
-
-                # To PASS to another agent:
-
-                ```json
-                {{
-                "decision": "PASS",
-                "agent": "<agent_name>",
-                "prompt": "Prompt for the agent (Markdown format, highlight important info with **)",
-                "thought": "Summary of the decision process (previous agent's actions, reason for passing)"
-                }}
-                ```
-                # To END the conversation:
-
-                ```JSON
-                {{
-                "decision": "END"
-                }}
-                ```
-                **Include tool use inside the prompt when applicable.**
-                **If objective is just a conversation, and a perfect response is given, Choose END.**
-
-                # OBJECTIVE:
-                {self.passobjective}
+        
+        # Synthesize responses and decide next action
+        synthesis_result = self._synthesize_response(response)
+        
+        if synthesis_result.get("decision") == "PASS":
+            if self.verbose:
+                print(f"{Fore.CYAN}Passing to next agent:{Style.RESET_ALL}")
+                print(f"Progress Summary: {synthesis_result.get('progress_summary')}")
             
-            """)
-
-            pass_info = self.llm.run("Generate only JSON")
-            self.llm.reset()
-            pass_info = self._parse_and_fix_json(pass_info)
-
-            if pass_info.get("decision") == "PASS":
-                if self.verbose:
-                    print(f"{Fore.CYAN}{pass_info}{Style.RESET_ALL}")
-                agent_name = pass_info.get("agent")
-                if agent_name:
-                    agent = self._get_agent_by_name(agent_name)
-                    if agent:
-                        agent.objective = pass_info.get("prompt")
-                        print(f"Passing to agent: {agent_name}")
-                        return agent.rollout() 
-
-            # If "decision" is not "PASS", return the current response
-            print(f"{Fore.BLUE}Final Consolidated response:{Style.RESET_ALL}")
-            print(response)
-            return response 
+            agent_name = synthesis_result.get("agent")
+            if agent_name:
+                agent = self._get_agent_by_name(agent_name)
+                if agent:
+                    agent.objective = synthesis_result.get("prompt")
+                    print(f"Passing to agent: {agent_name}")
+                    return agent.rollout()
+        
+        # If decision is END or agent not found
+        final_response = synthesis_result.get("final_response", {})
+        print(f"{Fore.BLUE}Final Synthesized Response:{Style.RESET_ALL}")
+        
+        if self.verbose:
+            print(f"{Fore.GREEN}Contributing Agents: {final_response.get('contributing_agents', [])}")
+            print()
+            print(f"{Fore.LIGHTBLUE_EX}Key Insights:{Style.RESET_ALL} {final_response.get('key_insights', [])}")
+            print()
+            print(f"{Fore.MAGENTA}Reasoning: {Style.RESET_ALL}{final_response.get('reasoning', '')}")
+            
+        synthesized_answer = final_response.get("synthesized_answer", response)
+        print()
+        print(synthesized_answer)
+        return synthesized_answer 
 
     def _get_agent_by_name(self, agent_name: str):
         """Helper function to retrieve an agent by name."""
@@ -431,7 +532,7 @@ Emphasize the significance of adhering to the outlined procedures to ensure the 
                 parameters = call.get("parameter", {})
                 thought = call.get("thought", "")
                 if self.verbose:
-                    print(f"{Fore.MAGENTA}Action: {thought}{Style.RESET_ALL}")
+                    print(f"{Fore.MAGENTA}Thought: {thought}{Style.RESET_ALL}")
                 for k, v in parameters.items():
                     if isinstance(v, str) and re.search(r"{\d+\.output}", v):
                         for function in self.all_functions:

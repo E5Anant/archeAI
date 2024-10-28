@@ -155,8 +155,6 @@ response = my_taskforce.rollout()
 
 This basic example shows how to create a simple agent with a tool and then use a `TaskForce` to manage its execution.
 
-## Make sure to star this repo if you liked it. 
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to open an issue or submit a pull request.

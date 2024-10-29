@@ -44,7 +44,8 @@ The `Agent` class is the heart of ArcheAI. It represents an individual AI agent 
 | `max_chat_responses` | The maximum number of previous conversation turns to store in memory. Defaults to `12`. |
 | `max_summary_entries` | The maximum number of summary entries to store in memory. Defaults to `3`. |
 | `max_iterations` | The maximum number of iterations the agent will attempt to generate a valid response. Defaults to `3`. |
-| `check_response_validity` | A boolean value indicating whether the agent should check the validity of the response before it is returned. Defaults to `True`. |
+| `check_response_validity` | A boolean value indicating whether the agent should check the validity of the response before it is returned. Defaults to `False`. |
+| `allow_full_delegation` | Whether the agent should allow full delegation switching to `True` would give all the previous responses from different agents. Switching to False would only allow the last response, Defaults to `False` |
 | `verbose` | A boolean value indicating whether the agent should print verbose output during execution. Defaults to `False`. |
 
 #### Methods
@@ -99,6 +100,7 @@ The `TaskForce` class lets you manage a group of `Agent` objects, enabling colla
 |-----------|-------------|
 | `agents` | A list of `Agent` objects that belong to the task force. |
 | `objective` | A overall goal or task that the task force is trying to achieve. |
+| `mindmap` | A Overall Plan or Mind Map for the task force. |
 
 #### Methods
 
@@ -155,6 +157,17 @@ response = my_taskforce.rollout()
 
 This basic example shows how to create a simple agent with a tool and then use a `TaskForce` to manage its execution.
 
+## Important Questions 🧐
+
+#### What is MindMap?
+
+A mind map is a visual representation of the task force's workflow. It is a visual representation of the task force's goals and how it is going to achieve them.
+It is automatically generated if not provided.
+
+#### What does `allow_full_delegation` mean?
+
+By default, allow_full_delegation is set to False. Setting it to True will allow the agent to delegate all the previous responses from different agents.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to open an issue or submit a pull request.
@@ -162,3 +175,5 @@ Contributions are welcome! Please feel free to open an issue or submit a pull re
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Make Sure TO STAR 🌟

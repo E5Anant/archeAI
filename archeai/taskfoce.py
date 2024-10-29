@@ -13,24 +13,55 @@ colorama.init(autoreset=
 class TaskForce:
     def __init__(self,
                  agents: List[Agent],
-                 objective:str = "No current task") -> None:
+                 objective:str = "No current task",
+                 mindmap: Optional[str] = None) -> None:
         self.agents = agents
         self.llm = self.agents[0].llm
         self.objective = objective
+        self.mindmap = mindmap
+        if not self.mindmap:
+            self.mindmap = self._get_mindmap()
         for agent in self.agents:
             agent.agents = self.agents
             self.objective = self.objective
             agent.passobjective = self.objective
+            agent.mindmap = self.mindmap
+
+        print(f"{Fore.GREEN}Mindmap:{Style.RESET_ALL}")
+        print(self.mindmap)
+
+    def _get_mindmap(self) -> str:
+        self.llm.reset()
+        self.llm.__init__(system_prompt=f"""
+        You are managing a team of agents for task execution.
+        You are tasked with generating a mindmap for the team.
+        The team consists of {len(self.agents)} agents.
+
+        # Team Members
+        {self._get_agents_info()}
         
+        # OBJECTIVE
+        {self.objective}
+
+        **Create a plan for the team of agents to complete the objective.**
+        **Don't add unnecessary steps or agent calls which don't require to complete the objective.**
+        **Try Getting the steps as minimum as possible**
+        **The plan will be consisting of several steps to accomplish the objective.**
+        **A step could contain the info for passing relevant info from one agent to another or which agent to execute with the appropirate tools.**
+        **Try to get the plan as simple as possible, with minimum number of agent calls**""")
+        result = self.llm.run("Create a plan for the team of agents to complete the objective")
+        self.llm.reset()
+        return result
+    
     def rollout(self) -> str:
         if len(self.agents) == 1:
             for agent in self.agents:
                 agent.objective = self.objective
                 agent.passobjective = self.objective
                 agent.agents = self.agents
-            return self.agents[0].rollout()
+            self.agents[0].rollout()
         else:
-            return self.execute()
+            self.execute()
         
     def execute(self) -> str:
         agent_info = self._get_agents_info()
@@ -43,10 +74,12 @@ class TaskForce:
         Available Agents: 
         {agent_info} 
 
+        # PLAN
+        {self.mindmap}
+
         Instructions:
-        1. Choose the most suitable agent for the next task.
-        3. If tasks is to be completed in multiple steps by multiple agents suggest only the first agent with task it needs to do.
-        4. Return a JSON object:
+        1. Analyz the first step and choose the most suitable agent to execute the task.
+        2. Return a JSON object:
         
         ```json
         {{
@@ -55,15 +88,14 @@ class TaskForce:
         }}"""
         )
         json_response = self.llm.run("Generate JSON for the first task")
+        self.llm.reset()  # Reset LLM after the entire task rollout
         json_response = self._parse_and_fix_json(json_response)
         print(f"{Fore.GREEN}{json_response}{Style.RESET_ALL}")
         agent = self._get_agent_by_name(json_response["agent_name"])
         task = json_response["objective"]
         agent.objective = task
         agent.passobjective = self.objective  # Pass the overall objective to the agent
-        response = agent.rollout()
-        self.llm.reset()  # Reset LLM after the entire task rollout
-        return response
+        agent.rollout()
 
     def _parse_and_fix_json(self, json_str: str) -> Dict:
         """Parses JSON string and attempts to fix common errors. 

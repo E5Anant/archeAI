@@ -87,8 +87,41 @@ class Agent:
         max_chat_responses: int = 12,
         max_summary_entries: int = 5,
         max_iterations: int = 3,  # Add max_iterations parameter
-        check_response_validity: bool = True
+        allow_full_delegation: bool = False,
+        check_response_validity: bool = False,
     ) -> None:
+        """
+        Initialize the Agent class.
+
+        Parameters
+        ----------
+        llm : Type[GroqLLM]
+            The language model used by the agent.
+        tools : List[Tool], optional
+            A list of tools that the agent can use, by default []
+        identity : str, optional
+            The name of the agent, by default "Agent"
+        description : str, optional
+            A description of the agent, by default "A helpful AI agent."
+        expected_output : str, optional
+            The expected output of the agent, by default "Concise and informative text."
+        verbose : bool, optional
+            Whether the agent should be verbose, by default False
+        memory : bool, optional
+            Whether the agent should use memory, by default True
+        memory_dir : str, optional
+            The directory where the agent should store memory, by default "memories"
+        max_chat_responses : int, optional
+            The maximum number of chat responses before summarizing in memory, by default 12
+        max_summary_entries : int, optional
+            The maximum number of summary entries to store in memory before summarizing, by default 5
+        max_iterations : int, optional
+            The maximum number of iterations, by default 3
+        allow_full_delegation : bool, optional
+            Whether the agent should allow full delegation switching to True would give all the previous responses from different agents. Switching to False would only allow the last response, by default False
+        check_response_validity : bool, optional
+            Whether the agent should check response validity, by default True
+        """
 
         self.llm = llm
         self.tools = tools
@@ -97,9 +130,11 @@ class Agent:
         self.expected_output = expected_output
         self.objective = None
         self.passobjective = None
+        self.mindmap = None
         self.decision = False
         self.verbose = verbose
         self.agents = []
+        self.delegation_enabled = allow_full_delegation
         self.memory_enabled = memory
         self.max_iterations = max_iterations  # Assign to the instance variable
         self.check_validity = check_response_validity
@@ -209,16 +244,25 @@ class Agent:
         return result
 
     def _get_agent_history(self) -> str:
-        """Format the complete history of agent responses."""
-        history = []
-        for agent_name, responses in self.agent_responses.items():
-            agent_history = f"\n### {agent_name}'s Responses:\n"
-            for resp in responses:
-                agent_history += f"- [{resp['timestamp']}] {resp['response']}\n"
-            history.append(agent_history)
-        return "\n".join(history)
+        """Get the complete history of agent responses."""
+        if self.delegation_enabled:
+            """Format the complete history of agent responses."""
+            history = []
+            for agent_name, responses in self.agent_responses.items():
+                agent_history = f"\n### {agent_name}'s Responses:\n"
+                for resp in responses:
+                    agent_history += f"- [{resp['timestamp']}] {resp['response']}\n"
+                history.append(agent_history)
+            return "\n".join(history)
+        else:
+            history = f"""
+### {self.identity}'s Responses:
+TimeStamp: [{self.agent_responses[self.identity][-1]["timestamp"]}] 
+Response: {self.agent_responses[self.identity][-1]["response"]}
+            """
+            return history
 
-    def _record_agent_response(self, agent_name: str, response: str):
+    def _record_agent_response(self, agent_name: str, task: str, response: str):
         """Record an agent's response with timestamp and maintain response chain."""
         from datetime import datetime
         timestamp = datetime.now().isoformat()
@@ -235,6 +279,7 @@ class Agent:
         self.response_chain.append({
             "agent": agent_name,
             "timestamp": timestamp,
+            "task": task,
             "response": response,
             "tools_used": [tool.func.__name__ for tool in self.tools] if self.tools else []
         })
@@ -243,8 +288,10 @@ class Agent:
         """Generate a synthesized response based on all agent interactions."""
         agents = self._get_agents_info()
         response_history = self._format_response_chain()
+
+        # print(response_history)
         
-        synthesis_prompt = f"""
+        self.llm.__init__(system_prompt = f"""
         You are an expert Response Synthesizer tasked with creating a comprehensive final response that addresses the original objective by combining insights from multiple AI agents. Your goal is to either create a final response or determine if another agent's involvement is needed.
 
         # ORIGINAL OBJECTIVE
@@ -253,23 +300,24 @@ class Agent:
         # AVAILABLE AGENTS AND THEIR CAPABILITIES
         {agents}
 
-        # COMPLETE INTERACTION HISTORY
+        # INTERACTION HISTORY
         {response_history}
 
         # CURRENT CONTEXT
         Latest Response from {self.identity}:
         {current_response}
 
+        # PLAN
+        {self.mindmap}
+
         # YOUR TASKS
 
         1. ANALYZE ALL RESPONSES:
-        - Review each agent's contribution
-        - Identify key insights and important findings
-        - Note any gaps or inconsistencies
         - Evaluate how well the objective has been addressed
+        - Analyze the mindmap and get the last step which was done and then make a decision.
 
         2. SYNTHESIZE INFORMATION:
-        - Combine relevant insights from all agents
+        - Combine relevant insights from all agents and include in prompt
         - Resolve any contradictions
         - Ensure all aspects of the objective are covered
         - Create a coherent narrative from multiple perspectives
@@ -281,6 +329,8 @@ class Agent:
 
         4. ENSURE QUALITY:
         - Verify accuracy of combined information
+        - **Check all the previous agent's responses, and determine the next step.**
+        - **Ensure the last agent's response and the Task and determine the next step.**
         - Maintain consistency in tone and style
         - Preserve important details from each agent
         - Format for clarity and readability
@@ -294,59 +344,62 @@ class Agent:
             "decision": "END",
             "final_response": {{
                 "synthesized_answer": "Complete, well-structured response that fulfills the objective",
-                "contributing_agents": ["List of agents whose input was used"],
-                "key_insights": ["List of main points from different agents"],
                 "reasoning": "Explanation of how this response fulfills the objective"
             }}
         }}
         ```
+        **don't end untill the objective is fully addressed**
 
         2. If another agent's involvement is needed:
         ```json
         {{
             "decision": "PASS",
             "agent": "<agent_name>",
-            "prompt": "Detailed prompt highlighting gaps and required information",
-            "progress_summary": {{
-                "completed_aspects": ["List of addressed points"],
-                "remaining_gaps": ["List of points still needing attention"],
-                "next_steps": "Specific tasks for the next agent"
-            }}
+            "prompt": "Detailed prompt for the agent to follow up including full information which is necessary from previous agent responses"
         }}
         ```
 
         # GUIDELINES
         - Maintain factual accuracy when combining information
+        - **None of the agents are having past agent interactions.**
+        - **Always add the tool to use and full relevant information in the prompt (your prompt is going to be task for the selected agent).**
         - Preserve the context and nuance from each agent's response
+        - **If you are having previous agent interactions, that could be used in making of the prompt, use it**
         - Focus on creating a cohesive narrative
+        - **Always Stricly follow the PLAN and don't skip any steps.**
         - Be explicit about any remaining gaps or uncertainties
+        - Always take actions according to mindmap
         - Ensure the final response directly addresses the original objective
-        """
+        """)
 
-        self.llm.__init__(system_prompt="You are an expert Response Synthesizer...")
-        synthesis_result = self.llm.run(synthesis_prompt)
+        synthesis_result = self.llm.run("Generate an appropriate response in JSON format.")
         self.llm.reset()
         
         return self._parse_and_fix_json(synthesis_result)
 
     def _format_response_chain(self) -> str:
         """Format the complete chain of responses in chronological order."""
-        formatted_history = "## Complete Response Chain:\n\n"
-        for entry in self.response_chain:
-            formatted_history += f"""
-            ### Agent: {entry['agent']}
-            Timestamp: {entry['timestamp']}
-            Tools Used: {', '.join(entry['tools_used']) if entry['tools_used'] else 'None'}
-            Response:
-            {entry['response']}
-            {'---' * 30}
-            """
-        return formatted_history
+        if self.delegation_enabled:
+            formatted_history = "## Complete Response Chain:\n\n"
+            for entry in self.response_chain:
+                formatted_history += f"""
+                ### Agent: {entry['agent']}
+                Timestamp: {entry['timestamp']}
+                Task: {entry['task']}
+                Tools Used: {', '.join(entry['tools_used']) if entry['tools_used'] else 'None'}
+                Response:
+                {entry['response']}
+                {'---' * 30}
+                """
+            return formatted_history
+        else:
+            formatted_history = self._get_agent_history()
+            return formatted_history
 
     def _agent_pass(self, response: str) -> str:
         """Enhanced agent pass with response synthesis."""
         # Record the current agent's response
-        self._record_agent_response(self.identity, response)
+        self._record_agent_response(self.identity, self.objective, response)
 
         if len(self.agents) == 1:
             print(f"{Fore.BLUE}Final Consolidated response:{Style.RESET_ALL}")
@@ -355,11 +408,14 @@ class Agent:
         
         # Synthesize responses and decide next action
         synthesis_result = self._synthesize_response(response)
-        
+        final_response = synthesis_result.get("final_response", {})
         if synthesis_result.get("decision") == "PASS":
             if self.verbose:
                 print(f"{Fore.CYAN}Passing to next agent:{Style.RESET_ALL}")
-                print(f"Progress Summary: {synthesis_result.get('progress_summary')}")
+                print(f"{Fore.GREEN}Agent: {Style.RESET_ALL}{synthesis_result.get('agent', '')}:{Style.RESET_ALL}")
+                print()
+                print(f"{Fore.GREEN}Prompt: {Style.RESET_ALL}{synthesis_result.get('prompt', '')}")
+
             
             agent_name = synthesis_result.get("agent")
             if agent_name:
@@ -370,16 +426,10 @@ class Agent:
                     return agent.rollout()
         
         # If decision is END or agent not found
-        final_response = synthesis_result.get("final_response", {})
         print(f"{Fore.BLUE}Final Synthesized Response:{Style.RESET_ALL}")
         
         if self.verbose:
-            print(f"{Fore.GREEN}Contributing Agents: {final_response.get('contributing_agents', [])}")
-            print()
-            print(f"{Fore.LIGHTBLUE_EX}Key Insights:{Style.RESET_ALL} {final_response.get('key_insights', [])}")
-            print()
-            print(f"{Fore.MAGENTA}Reasoning: {Style.RESET_ALL}{final_response.get('reasoning', '')}")
-            
+            print(f"{Fore.MAGENTA}Reasoning: {Style.RESET_ALL}{final_response.get('reasoning', '')}")            
         synthesized_answer = final_response.get("synthesized_answer", response)
         print()
         print(synthesized_answer)
@@ -400,7 +450,7 @@ class Agent:
                 f"Name: {agent.identity}\n"
                 f"Description: {agent.description}\n"
                 f"{tool_info}\n"
-                f"Current Task: {current_task}"
+                f"Task: {current_task}"
             )
         return "\n\n".join(agent_info)
 
@@ -725,47 +775,66 @@ Emphasize the significance of adhering to the outlined procedures to ensure the 
 
         return summary
 
-    def _get_next_tool_call(self, previous_tool_output: str, all_tools, user_task: str) -> dict:
+    def _get_next_tool_call(self, previous_tool_output: str, next_tool, user_task: str) -> dict:
+        """Enhanced tool selection with improved reasoning."""
         prompt = f"""
-        You are an AI assistant helping to choose the best tool to use for a given task. 
-
-        The user's original task is: {user_task}
-
-        The output from the previous tool call is: {previous_tool_output}
-
-        Available tools:
-        {all_tools}
-
-        Based on the user's task and the previous tool's output, determine the most logical next tool to call. 
-        If no tool is suitable, return an empty JSON object. 
-
-        Output your suggestion in the following JSON format:
+        Role: Expert Tool Chain Analyst
+        
+        Objective: Determine the optimal next tool in a processing chain based on:
+        1. Previous tool output
+        2. Available tools
+        3. User's original task
+        4. Overall context
+        
+        Context:
+        - Original Task: {user_task}
+        - Previous Output: {previous_tool_output}
+        - Available Tool: {next_tool}
+        
+        Analysis Requirements:
+        1. Evaluate tool compatibility with previous output
+        2. Assess alignment with user's objective
+        3. Consider data format requirements
+        4. Identify potential processing gaps
+        
+        Decision Criteria:
+        - Data compatibility
+        - Task relevance
+        - Processing efficiency
+        - Expected outcome value
+        
+        Output Format:
         {{
-            "tool_name": "<tool_name>",
-            "parameter": {{<param_name>: "<param_value>"}} 
+            "tool_name": "<selected_tool>",
+            "parameter": {{
+                "<param_name>": "<processed_value>"
+            }},
+            "reasoning": "Brief explanation of tool selection and parameter processing"
         }}
-
-        For example:
-        {{
-            "tool_name": "weather_tool",
-            "parameter": {{"location": "London"}}
-        }}
+        
+        Additional Guidelines:
+        - Ensure parameter values are properly formatted
+        - Consider error handling requirements
+        - Maintain data integrity across tool chain
+        - Return empty JSON if no suitable tool is found
         """
-
-        self.llm.__init__(system_prompt="You are an assistant helping to choose the best tool...")
+        
+        self.llm.__init__(
+            system_prompt="You are an expert Tool Chain Analyst specializing in optimal tool selection and parameter processing."
+        )
         response = self.llm.run(prompt)
         self.llm.reset()
-
-        if self.verbose:
-            print("Intermediary LLM response:")
-            print(response)
-
+        
         try:
-            response = self._parse_and_fix_json(response)
-            return response
+            parsed_response = self._parse_and_fix_json(response)
+            if self.verbose and parsed_response.get("reasoning"):
+                print(f"{Fore.CYAN}Tool Selection Reasoning: {parsed_response['reasoning']}{Style.RESET_ALL}")
+            return parsed_response
         except json.JSONDecodeError as e:
-            print(f"Error parsing JSON response from intermediary LLM: {e}")
+            if self.verbose:
+                print(f"{Fore.RED}Error in tool selection: {e}{Style.RESET_ALL}")
             return {}
+            
 
     def _is_response_valid(self, response: str, call) -> bool:
         """Uses the LLM to evaluate the response validity based on the current objective."""

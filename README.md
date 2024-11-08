@@ -76,6 +76,7 @@ The Agent class is the heart of ArcheAI. It represents an individual AI agent wi
 | `max_iterations` | The maximum number of iterations the agent will attempt to generate a valid response. Defaults to `3`. |
 | `check_response_validity` | A boolean value indicating whether the agent should check the validity of the response before it is returned. Defaults to `False`. |
 | `allow_full_delegation` | Whether the agent should allow full delegation switching to `True` would give all the previous responses from different agents. Switching to False would only allow the last response, Defaults to `False` |
+| `output_file` | The name of the file where the agent's responses will be saved. Defaults to `None`. |
 | `verbose` | A boolean value indicating whether the agent should print verbose output during execution. Defaults to `False`. |
 
 

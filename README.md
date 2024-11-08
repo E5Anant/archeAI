@@ -4,8 +4,6 @@
 
 # Welcome to ArcheAI! 🚀
 
-<img src="https://raw.githubusercontent.com/E5Anant/archeAI/main/assets/logo.png" alt="ArcheAI Logo" width="200"/>
-
 *Building AI agents should feel like assembling a dream team, not wrestling with complex code.*
 
 [![PyPI version](https://badge.fury.io/py/archeai.svg)](https://badge.fury.io/py/archeai)

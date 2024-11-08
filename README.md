@@ -111,10 +111,16 @@ weather_tool = Tool(
 
 #### Key Attributes
 
-- `func`: The Python function defining the tool's action
-- `name`: Tool's name (derived from function name)
-- `description`: Brief description of the tool's purpose
-- `params`: Dictionary of parameter information
+| Attribute | Description |
+|-----------|-------------|
+| `func` | The Python function that defines the tool's action. |
+| `name` | The name of the tool (automatically derived from the function name). |
+| `description` | A brief description of what the tool does. This is used by the agent to understand the tool's purpose. |
+| `returns_value` | A boolean indicating whether the tool returns a value that can be used by other tools or included in the response. Defaults to `True`. |
+| `instance` | Optional instance of a class if the tool is a bound method. |
+| `llm` | Optional LLM object for more advanced tool interactions (e.g., using the LLM to help determine tool parameters). |
+| `verbose` | A boolean indicating whether the tool should print verbose output during execution. Defaults to `False`. |
+| `params` | An Optional dictionary containing information about the tool's parameters (automatically extracted if not provided). |
 
 </details>
 

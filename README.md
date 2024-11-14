@@ -262,6 +262,4 @@ This project is licensed under the [MIT License](https://github.com/E5Anant/arch
 
 If you find ArcheAI helpful, please give us a star on GitHub!
 
-[![GitHub stars](https://img.shields.io/github/stars/E5Anant/archeAI.svg?style=social&label=Star)](https://github.com/E5Anant/archeAI)
-
 </div>

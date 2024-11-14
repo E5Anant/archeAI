@@ -113,7 +113,4 @@ writer = Agent(
                 )
 
 team = TaskForce(agents=[researcher, writer, content_saver], objective="get information about wormholes in the universe and save the full informative article in wormholes.md",)
-
-# team.assign_task(task="get information about wormholes in the universe and save the article in wormholes.md")
-
 team.rollout()

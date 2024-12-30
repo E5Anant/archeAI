@@ -6,8 +6,9 @@
 
 *Building AI agents should feel like assembling a dream team, not wrestling with complex code.*
 
-![Pypi Version](https://img.shields.io/badge/archeai-0.0.5-mediumgreen)
+![Pypi Version](https://img.shields.io/badge/archeai-0.0.6-mediumgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub stars](https://img.shields.io/github/stars/E5Anant/archeAI.svg?style=social&label=Star)](https://github.com/E5Anant/archeAI)
 
 [Documentation](https://github.com/E5Anant/archeAI#readme) | [PyPI Package](https://pypi.org/project/archeai/) | [GitHub Repository](https://github.com/E5Anant/archeAI)
 
@@ -35,6 +36,8 @@ Let's break it down:
    - TaskForce feature for seamless agent orchestration
 4. **Built for Exploration** 🔭
    - Flexible foundation ready to adapt to new technologies
+5. **large-scale AI agent networks** 🌐
+   - Scalable architecture for complex workflows
 
 </div>
 
@@ -66,23 +69,14 @@ The Agent class is the heart of ArcheAI. It represents an individual AI agent wi
 | `identity` | A string representing the agent's name or identifier. |
 | `description` | A brief description of the agent's role or purpose. |
 | `expected_output` | A string describing the expected format or style of the agent's responses. |
-| `objective` | The current task or goal that the agent is trying to achieve. |
-| `memory` | A boolean value indicating whether the agent should use memory (to retain context from previous interactions). Defaults to `True`. |
 | `ask_user` | A boolean value indicating whether the agent should ask the user for input when generating responses. Defaults to `True`. |
-| `memory_dir` | The directory where the agent's memory files will be stored. Defaults to `memories`. |
-| `max_chat_responses` | The maximum number of previous conversation turns to store in memory. Defaults to `12`. |
-| `max_summary_entries` | The maximum number of summary entries to store in memory. Defaults to `3`. |
 | `max_iterations` | The maximum number of iterations the agent will attempt to generate a valid response. Defaults to `3`. |
 | `check_response_validity` | A boolean value indicating whether the agent should check the validity of the response before it is returned. Defaults to `False`. |
-| `allow_full_delegation` | Whether the agent should allow full delegation switching to `True` would give all the previous responses from different agents. Switching to False would only allow the last response, Defaults to `False` |
 | `output_file` | The name of the file where the agent's responses will be saved. Defaults to `None`. |
 | `verbose` | A boolean value indicating whether the agent should print verbose output during execution. Defaults to `False`. |
 
 
 #### Methods
-
-- `add_tool(tool)`: Add a new tool to the agent
-- `remove_tool(tool_name)`: Remove a tool by name
 - `rollout()`: Execute the agent's main workflow
 
 </details>
@@ -130,12 +124,14 @@ Manage a group of Agent objects for collaboration and complex workflows.
 #### Key Attributes
 
 - `agents`: List of Agent objects in the task force
-- `objective`: Overall goal or task for the task force
-- `mindmap`: Overall plan or mind map (auto-generated if not provided)
+- `caching_dir`: Directory to store cached responses
 
 #### Key Methods
 
-- `rollout()`: Starts the task force's execution
+- `start_force()`: Begin the task force's workflow
+- `execute_agent(agent, prompt)`: Execute a specific agent's workflow
+- `record_result(agent)`: Save the result of an agent's workflow
+- `exit_force()`: End the task force's workflow also delete the cache
 
 <details>
 <summary>Workflow Diagram</summary>
@@ -178,22 +174,19 @@ calculate_tool = Tool(func=calculate,
 greeter = Agent(llm=llm, 
                 tools=[hello_tool], 
                 identity="Friendly Greeter",
-                memory=False,
                 verbose=True)
 
 math_magician = Agent(llm=llm, 
                       tools=[calculate_tool], 
                       identity="Math Magician",
-                      memory=False,
                       verbose=True)
 
 # Assemble your task force!
-my_taskforce = TaskForce(agents=[greeter, math_magician], 
-                         objective="Hi I am Mervin greet me, can you solve 3-4*2*5/4/2.1*6 for me and give a explanation.") 
-
-# Start the interaction
-response = my_taskforce.rollout()
-print(response)
+force = TaskForce(agents=[greeter, math_magician], caching_dir='cache')
+force.start_force()
+force.execute_agent(greeter, "Hi I am mervin")
+force.execute_agent(math_magician, "2+2")
+force.exit_force()
 ```
 
 This example demonstrates creating agents with tools and using a TaskForce to manage execution.
@@ -205,21 +198,11 @@ This example demonstrates creating agents with tools and using a TaskForce to ma
 ## 🧐 Important Questions
 
 <details>
-<summary><strong>What is MindMap?</strong></summary>
+<summary><strong>What does `record_result` func do?</strong></summary>
 
-A mind map is a visual representation of the task force's workflow and goals. It's automatically generated if not provided, helping to organize and structure the collaboration between agents.
+The `record_result` function is used to save the result of an agent's workflow. This can be useful for passing one agent's response to another.
 
-</details>
-
-<details>
-<summary><strong>What does allow_full_delegation mean?</strong></summary>
-
-The `allow_full_delegation` parameter controls how much information is shared between agents:
-
-- When `False` (default): Only the last response is shared
-- When `True`: All previous responses from different agents are shared
-
-This allows for more comprehensive or limited collaboration depending on your needs.
+This concludes in the scalability and simplicity of the architecture.
 
 </details>
 
@@ -229,9 +212,9 @@ This allows for more comprehensive or limited collaboration depending on your ne
 
 - **Multi-LLM Support**: Seamlessly switch between different language models
 - **Custom Tool Creation**: Easily create and integrate your own tools
-- **Memory Management**: Fine-tune agent memory for context retention
 - **Response Validation**: Ensure output quality with built-in validation
-
+- **Easy Passing of Information**: Share information between agents with ease using the `record_result` function
+- **Scalable Architecture**: Build large-scale AI agent networks with the TaskForce class
 ---
 
 ## 📈 Performance and Scalability
@@ -239,10 +222,143 @@ This allows for more comprehensive or limited collaboration depending on your ne
 ArcheAI is designed for efficiency:
 
 - Lightweight core for minimal overhead
-- Asynchronous capabilities for improved performance
 - Scalable architecture for complex agent networks
 
 ---
+
+<details>
+<summary>Actual Use Case:</summary>
+
+```python
+from archeai.llms import Gemini
+from archeai import Agent, Tool, TaskForce
+from archeai.tools import get_current_time, web_search
+import os
+
+def list_dir():
+    """Returns a list of items in the current working directory."""
+
+    try:
+        items = os.listdir()
+        return items
+    except OSError as e:
+        print(f"Error listing directory: {e}")
+        return []
+def write_to_file(filename:str, content:str):
+    """Writes the given content to a file with the specified filename.
+
+    Args:
+        filename (str): The name of the file to write to.
+        content (str): The content to write to the file.
+    """
+
+    try:
+        with open(filename, 'w') as f:
+            f.write(content)
+        print(f"Successfully wrote to '{filename}'")
+    except OSError as e:
+        print(f"Error writing to file: {e}")
+
+def gcd(a:int, b:int):
+    """
+    Calculate the Greatest Common Divisor (GCD) of two numbers using the Euclidean algorithm.
+
+    Parameters:
+    a (int): The first number.
+    b (int): The second number.
+
+    Returns:
+    int: The GCD of the two numbers.
+    """
+    while b:
+        a, b = b, a % b
+    return a+b
+
+llm_instance = Gemini()
+
+# Define the tools using the OwnTool class
+write_tool = Tool(
+    func=write_to_file,
+    description="Writes the given content to a file to the given filename in dir",
+    returns_value=False,
+    llm = llm_instance,
+    verbose=True
+)
+
+list_tool = Tool(
+    func=list_dir,
+    description="Provides the list of files and folders in current working dir.",
+    returns_value=True,
+    llm = llm_instance,
+    verbose=True
+)
+
+time_tool = Tool(
+    func=get_current_time,
+    description="Provides the current time.",
+    returns_value=True,
+    llm = llm_instance,
+    verbose=True
+)
+
+web_tool = Tool(
+    func=web_search,
+    description="Provides web search result on the given query.",
+    returns_value=True,
+    llm = llm_instance,
+    verbose=True
+)
+
+# Initialize the language model instance
+
+content_saver = Agent(
+        llm=llm_instance,
+        identity="content_saver",
+        tools=[write_tool],
+        verbose=True,
+        description="A content saver which can save any content in markdown format to a given file.",
+        expected_output="In markdown format",
+)
+
+researcher = Agent(
+        llm=llm_instance,
+        identity="researcher",
+        tools=[time_tool, web_tool],
+        description="A researcher having access to web and can get info about any topic.",
+        expected_output="A summary of the research",
+        verbose=True,
+                )
+
+writer = Agent(
+        llm=llm_instance,
+        identity="writer",
+        tools=[],
+        description="A writer which can write on any topic with information.",
+        expected_output="In markdown format",
+        verbose=True,
+                )
+
+# Define the task force
+task_force = TaskForce(
+    agents=[content_saver, researcher, writer],
+    caching_dir="cache",
+)
+
+# Run the task force
+task_force.start_force()
+task_force.execute_agent(researcher, "What are wormholes?")
+researcher_result = task_force.record_result(researcher)
+print(researcher_result)
+task_force.execute_agent(writer, f"Write an article on wormholes. Here is the information: {researcher_result}")
+writer_result = task_force.record_result(writer)
+task_force.execute_agent(content_saver, f"Save this information in wormholes.md: {writer_result}")
+task_force.exit_force()
+
+```
+
+The Tools used from archeai in the use case are totally experimental and are not recommended to use.
+
+</details>
 
 <div align="center">
 
@@ -262,5 +378,7 @@ This project is licensed under the [MIT License](https://github.com/E5Anant/arch
 ## ⭐ Don't Forget to Star!
 
 If you find ArcheAI helpful, please give us a star on GitHub!
+
+[![GitHub stars](https://img.shields.io/github/stars/E5Anant/archeAI.svg?style=social&label=Star)](
 
 </div>

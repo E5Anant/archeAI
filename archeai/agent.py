@@ -6,11 +6,20 @@ from archeai.tools import Tool
 from typing import Type, List, Dict, Any
 from colorama import Fore, Style
 import colorama
-from archeai.memory import Memory  # Import the Memory class
+from rich.console import Console
+from rich.panel import Panel
+from rich import box
 
 # Configure logging
 
 colorama.init(autoreset=True)
+
+console = Console()
+
+def box_print(title: str, content: str, color: str):
+    content = "This is the content inside the box."
+    panel = Panel(content, title=title, box=box.SIMPLE, border_style=color,)
+    console.print(panel)
 
 def convert_function(func_name, description, **params):
     """Converts function info to JSON schema, handling missing params."""
@@ -78,13 +87,8 @@ class Agent:
         description: str = "A helpful AI agent.",
         expected_output: str = "Concise and informative text.",
         verbose: bool = False,
-        memory: bool = True,
-        memory_dir: str = "memories",
-        max_chat_responses: int = 12,
         ask_user: bool = True,
-        max_summary_entries: int = 5,
         max_iterations: int = 3,  # Add max_iterations parameter
-        allow_full_delegation: bool = False,
         check_response_validity: bool = False,
         output_file: str = None,
     ) -> None:
@@ -130,35 +134,13 @@ class Agent:
         self.identity = identity
         self.description = description
         self.expected_output = expected_output
-        self.objective = None
-        self.passobjective = None
-        self.mindmap = None
         self.ask_user = ask_user
-        self.decision = False
         self.file = output_file
+        self.objective = None
+        self.cache_dir = None
         self.verbose = verbose
-        self.agents = []
-        self.delegation_enabled = allow_full_delegation
-        self.memory_enabled = memory
         self.max_iterations = max_iterations  # Assign to the instance variable
         self.check_validity = check_response_validity
-        self.agent_responses = {}
-        self.response_chain = []
-
-        self.memory_dir = memory_dir
-        if not os.path.exists(memory_dir):
-            os.makedirs(memory_dir)
-
-        self.memory = Memory(
-            llm=self.llm,
-            status=self.memory_enabled,
-            assistant_name=self.identity,
-            history_dir=self.memory_dir,
-            max_memories=max_summary_entries,
-            max_responses=max_chat_responses,
-            db_filename=f"{self.identity}_memory.db",
-            system_prompt=f"You are {self.identity}, {self.description}.",
-        )
 
         if self.ask_user:
             # Tool and Function Setup
@@ -221,36 +203,12 @@ class Agent:
             {"name": tool.func.__name__, "description": tool.description} for tool in self.tools
         ]
 
-    def add_tool(self, tool: Tool):
-        """Add a tool dynamically."""
-        self.tools.append(tool)
-        self.all_functions.append(
-            convert_function(
-                tool.func.__name__, tool.description, **(tool.params or {})
-            )
-        )
-        self.tool_info_for_validation.append({"name": tool.func.__name__, "description": tool.description})
-
-    def remove_tool(self, tool_name: str):
-        """Remove a tool dynamically."""
-        self.tools = [
-            tool for tool in self.tools if tool.func.__name__ != tool_name
-        ]
-        self.all_functions = [
-            func
-            for func in self.all_functions
-            if func["function"]["name"] != tool_name
-        ]
-        self.tool_info_for_validation = [
-            info for info in self.tool_info_for_validation if info["name"] != tool_name
-        ]
-
     def _run_no_tool(self) -> str:
         for current_iteration in range(self.max_iterations):  # Iteration loop
 
             print(f"{Fore.CYAN}Iteration: {current_iteration + 1}{Style.RESET_ALL}")
             """Handles user queries when no tools are available."""
-            prompt = self.memory.gen_complete_prompt(self.objective)
+            prompt = self.objective
             self.llm.__init__(
                 system_prompt=f"""
             **You are {self.identity}, {self.description}.**
@@ -258,216 +216,19 @@ class Agent:
             #### EXPECTED OUTPUT:
             {self.expected_output}
 
-            #### OBJECTIVE:
+            #### QUERY:
             {self.objective}
             """,
                 messages=[],
             )
             result = self.llm.run(prompt)
             self.llm.reset()
-            self.memory.update_chat_history(self.identity, result)
             if self._is_response_valid(result, {"response": result}):  # Implement your validation logic
-                if len(self.agents) > 1:
-                    print(f"{Fore.GREEN}Response is valid, stopping iterations.{Style.RESET_ALL}")
-                    print("Response:")
-                    print(result)
+                print(f"{Fore.GREEN}Response is valid, stopping iterations.{Style.RESET_ALL}")
                 return result
             else:
                 print(f"{Fore.YELLOW}Response is not valid, retrying...{Style.RESET_ALL}")
-        if len(self.agents)>1:
-            print("Response:")
-            print(result)
         return result
-
-    def _get_agent_history(self) -> str:
-        """Get the complete history of agent responses."""
-        if self.delegation_enabled:
-            """Format the complete history of agent responses."""
-            history = []
-            for agent_name, responses in self.agent_responses.items():
-                agent_history = f"\n### {agent_name}'s Responses:\n"
-                for resp in responses:
-                    agent_history += f"- [{resp['timestamp']}] {resp['response']}\n"
-                history.append(agent_history)
-            return "\n".join(history)
-        else:
-            history = f"""
-### {self.identity}'s Responses:
-TimeStamp: [{self.agent_responses[self.identity][-1]["timestamp"]}] 
-Response: {self.agent_responses[self.identity][-1]["response"]}
-            """
-            return history
-
-    def _record_agent_response(self, agent_name: str, task: str, response: str):
-        """Record an agent's response with timestamp and maintain response chain."""
-        from datetime import datetime
-        timestamp = datetime.now().isoformat()
-        
-        # Store in agent_responses dictionary
-        if agent_name not in self.agent_responses:
-            self.agent_responses[agent_name] = []
-        self.agent_responses[agent_name].append({
-            "timestamp": timestamp,
-            "response": response
-        })
-        
-        # Add to response chain
-        self.response_chain.append({
-            "agent": agent_name,
-            "timestamp": timestamp,
-            "task": task,
-            "response": response,
-            "tools_used": [tool.func.__name__ for tool in self.tools] if self.tools else []
-        })
-
-    def _synthesize_response(self, current_response: str) -> Dict:
-        """Generate a synthesized response based on all agent interactions."""
-        agents = self._get_agents_info()
-        response_history = self._format_response_chain()
-
-        # print(response_history)
-        
-        self.llm.__init__(system_prompt = f"""
-        You are an expert Response Synthesizer with the following responsibilities:
-        1. Create a comprehensive final response addressing the original objective by combining insights from multiple AI agents.
-        2. Determine if another agent's involvement is needed or if the task is complete.
-
-        Context:
-        - Available Agents: 
-         {agents}
-        - Interaction History:
-         {response_history}
-        - Current Context: Latest Response from 
-         {self.identity}: {self.agent_responses.get(self.identity, [{}])[-1].get('response', '')}
-
-        Your Tasks:
-        1. Analyze all responses thoroughly.
-        2. Synthesize information from all sources.
-        3. Make a strategic decision: Generate a final response or identify gaps requiring another agent's expertise.
-        4. Ensure the quality and relevance of the synthesized information.
-
-        Output Format:
-        Respond in one of these two JSON formats:
-        1. For a complete response:
-        {{
-            "decision": "END",
-            "final_response": {{
-                "synthesized_answer": "Complete, well-structured response fulfilling the objective as a perspective of a Team Manager.",
-                "reasoning": "Explanation of how this response fulfills the objective"
-            }}
-        }}
-
-        2. For delegating to another agent:
-        {{
-            "decision": "PASS",
-            "agent": "<agent_name>",
-            "prompt": "Detailed prompt for the agent to follow up"
-        }}
-
-        Guidelines:
-        - Maintain factual accuracy and context relevance.
-        - **Follow the action plan strictly without skipping steps.**
-        - **Include all necessary information from previous agent responses in the prompt for delegation.**
-        - **End only when the objective is fully addressed.**
-        - **If A agent needs info from previous agent responses to continue, include it in the prompt in a Ordered fashion in markdown format.**
-        - **Always REPLY in the JSON format as it is.**
-        - **When generating a synthesized_answer, try generating the most approproiate answer from different agents and don't reffer to plans or mindmaps.**
-
-        #### Action Plan: 
-        {self.mindmap}
-        
-        #### CONCLUSION:
-        **Always Carefully Examine and Stick To The Action Plan and make decisions based on it without skipping any steps from the plan.**
-        **Always give a detailed prompt for the agent to follow up with all the necessary information from the previous agent responses.**
-        **Don't Choose to 'END' the task unless the PLAN is fully addressed.**
-        **When the last response satisfies the last step choose to 'END' the task.**
-
-        """)
-
-        synthesis_result = self.llm.run("Generate an appropriate response in JSON format.")
-        self.llm.reset()
-        synthesis_result = self._parse_and_fix_json(synthesis_result)
-        print(synthesis_result)
-        return  synthesis_result
-
-    def _format_response_chain(self) -> str:
-        """Format the complete chain of responses in chronological order."""
-        if self.delegation_enabled:
-            formatted_history = "## Complete Response Chain:\n\n"
-            for entry in self.response_chain:
-                formatted_history += f"""
-                ### Agent: {entry['agent']}
-                Timestamp: {entry['timestamp']}
-                Task: {entry['task']}
-                Tools Used: {', '.join(entry['tools_used']) if entry['tools_used'] else 'None'}
-                Response:
-                {entry['response']}
-                {'---' * 30}
-                """
-            return formatted_history
-        else:
-            formatted_history = self._get_agent_history()
-            return formatted_history
-
-    def _agent_pass(self, response: str) -> str:
-        """Enhanced agent pass with response synthesis."""
-        # Record the current agent's response
-        self._record_agent_response(self.identity, self.objective, response)
-
-        if len(self.agents) == 1:
-            print(f"{Fore.BLUE}Final Consolidated response:{Style.RESET_ALL}")
-            print(response)
-            return response
-        
-        # Synthesize responses and decide next action
-        synthesis_result = self._synthesize_response(response)
-        self.llm.reset()
-        if isinstance(synthesis_result, str):
-            final_response = {"synthesized_answer": synthesis_result}
-        else:
-            final_response = synthesis_result.get("final_response", {})
-        if synthesis_result.get("decision") == "PASS":
-            print(f"{Fore.CYAN}Passing to next agent:{Style.RESET_ALL}")
-            print(f"{Fore.GREEN}Agent: {Style.RESET_ALL}{synthesis_result.get('agent', '')}:{Style.RESET_ALL}")
-            print()
-            print(f"{Fore.GREEN}Prompt: {Style.RESET_ALL}{synthesis_result.get('prompt', '')}")
-
-            
-            agent_name = synthesis_result.get("agent")
-            if agent_name:
-                agent = self._get_agent_by_name(agent_name)
-                if agent:
-                    agent.objective = synthesis_result.get("prompt")
-                    print(f"Passing to agent: {agent_name}")
-                    return agent.rollout()
-        
-        # If decision is END or agent not found
-        print(f"{Fore.BLUE}Final Synthesized Response:{Style.RESET_ALL}")
-        
-        print(f"{Fore.MAGENTA}Reasoning: {Style.RESET_ALL}{final_response.get('reasoning', '')}")            
-        synthesized_answer = final_response.get("synthesized_answer", response)
-        print()
-        print(synthesized_answer)
-        return synthesized_answer 
-
-    def _get_agent_by_name(self, agent_name: str):
-        """Helper function to retrieve an agent by name."""
-        return next((agent for agent in self.agents if agent.identity == agent_name), None)
-
-    def _get_agents_info(self) -> str:
-        """Provides a formatted string of agent information for the LLM."""
-        agent_info = []
-        for agent in self.agents:
-            tool_names = [tool.func.__name__ for tool in agent.tools] if agent.tools else []
-            tool_info = f"Tools: {', '.join(tool_names)}" if tool_names else "Tools: None"
-            current_task = agent.objective if agent.objective else "No current task"
-            agent_info.append(
-                f"Name: {agent.identity}\n"
-                f"Description: {agent.description}\n"
-                f"{tool_info}\n"
-                f"Task: {current_task}"
-            )
-        return "\n\n".join(agent_info)
     
     def _ask_user(self, query: str) -> str:
         user_input = input(f"{query}: ")
@@ -593,7 +354,7 @@ The following tools are available for tool chaining:
 - **Ensure to fully analyze the user’s request and respond carefully, executing every task stated by the user in a single turn.**
 - If a conversation query is uncertain, give the query as it is to the llm_tool.
 
-### Objective:
+### Query:
 {self.objective}
 
 ### Conclusion:
@@ -601,12 +362,7 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
 ''',
                 messages=[],
             )
-
-            if self.memory_enabled:
-                prompt = self.memory.gen_complete_prompt(self.objective)
-                response = self.llm.run(prompt)
-            else:
-                response = self.llm.run("Generate JSON according to the objective.")
+            response = self.llm.run("Generate JSON according to the objective.")
             self.llm.reset()
 
             action = self._parse_and_fix_json(response)
@@ -642,16 +398,11 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
                     print(f"{Fore.RED}Tool Error ({call['tool_name']}):{Style.RESET_ALL} {e}")
                     results[call['call_ID']] = f"Error: {e}"
 
-            if self.memory_enabled:
-                self.memory.update_chat_history("Tools", json.dumps(results, indent=2))
-
             summary = self._generate_summary(results)
 
             # Logic to break the loop if the response is correct
             if self._is_response_valid(summary, action):  # Implement your validation logic
                 print(f"{Fore.GREEN}Response is valid, stopping iterations.{Style.RESET_ALL}")
-                if self.memory_enabled:
-                    self.memory.update_chat_history(self.identity, summary)
                 return summary
             else:
                 print(f"{Fore.YELLOW}Response is not valid, retrying...{Style.RESET_ALL}")
@@ -773,12 +524,7 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
             messages=[],
         )
 
-        if self.memory_enabled:
-            prompt_context = self.memory.gen_complete_prompt(
-                f"User Query:\n{query}\n\nTool Results:\n{context_str}"
-            )
-        else:
-            prompt_context = f"User Query:\n{query}\n\nTool Results:\n{context_str}"
+        prompt_context = f"User Query:\n{query}\n\nTool Results:\n{context_str}"
 
         response = self.llm.run(prompt_context)
         self.llm.reset()
@@ -789,9 +535,6 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
             [f"Tool {call_id}: {output}" for call_id, output in results.items()]
         )
         prompt = f"User Query:\n{self.objective}\n\nTool Results:\n{results_formatted}\n\n"
-
-        if self.memory_enabled:
-            prompt = self.memory.gen_complete_prompt(prompt)
 
         self.llm.__init__(
             system_prompt=f"""
@@ -819,11 +562,6 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
         )
 
         summary = self.llm.run(prompt)
-
-        if len(self.agents)>1:
-            print("")
-            print("Final Response:")
-            print(summary)
 
         return summary
 
@@ -927,7 +665,6 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
 
     def _run(self) -> str:
         """Executes the agent's workflow, handling tool usage conditionally."""
-        self.memory.update_chat_history("User", self.objective)
         self.llm.reset()
 
         if self.tools:
@@ -944,4 +681,5 @@ Emphasize the significance of adhering to the outlined procedures to ensure seam
         print(f"{Fore.LIGHTGREEN_EX}Executing {self.identity}...{Style.RESET_ALL}")
 
         response = self._run()  # Call the unified _run function
-        return self._agent_pass(response)
+        with open(f"{self.cache_dir}/{self.identity}.md", "w") as f:
+            f.write(response)

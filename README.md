@@ -6,7 +6,7 @@
 
 *Building AI agents should feel like assembling a dream team, not wrestling with complex code.*
 
-![Pypi Version](https://img.shields.io/badge/archeai-0.0.6-mediumgreen)
+![Pypi Version](https://img.shields.io/badge/archeai-0.0.7-mediumgreen)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub stars](https://img.shields.io/github/stars/E5Anant/archeAI.svg?style=social&label=Star)](https://github.com/E5Anant/archeAI)
 
